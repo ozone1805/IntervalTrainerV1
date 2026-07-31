@@ -173,6 +173,16 @@ body {
   margin-bottom: 10px;
 }
 
+.reset-btn {
+  align-self: flex-start;
+  color: #ff5c5c;
+  border-color: rgba(255, 92, 92, 0.4);
+}
+
+.reset-btn:hover:not(:disabled) {
+  background: rgba(255, 92, 92, 0.1);
+}
+
 .mastery-list,
 .confusion-list {
   list-style: none;

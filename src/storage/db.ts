@@ -38,3 +38,8 @@ export async function saveState(state: EngineState): Promise<void> {
   const db = await getDb();
   await db.put(STORE, state, STATE_KEY);
 }
+
+export async function clearState(): Promise<void> {
+  const db = await getDb();
+  await db.delete(STORE, STATE_KEY);
+}

@@ -29,7 +29,7 @@ export default function App() {
         ) : tab === "train" ? (
           <TrainingScreen engine={engine} />
         ) : (
-          <ProgressScreen progress={engine.progress} />
+          <ProgressScreen progress={engine.progress} onReset={engine.resetProgress} />
         )}
       </main>
     </div>

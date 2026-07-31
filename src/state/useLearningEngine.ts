@@ -3,7 +3,7 @@ import { pianoEngine } from "../audio/pianoEngine";
 import { createInitialState, LearningEngine, type ProgressSummary } from "../learning/engine";
 import type { Question } from "../learning/types";
 import { getInterval } from "../music/intervals";
-import { loadState, saveState } from "../storage/db";
+import { clearState, loadState, saveState } from "../storage/db";
 
 export type AnswerPhase = "answering" | "correct-done" | "incorrect";
 
@@ -86,5 +86,13 @@ export function useLearningEngine() {
     startNewQuestion(engine);
   }, [startNewQuestion]);
 
-  return { loading, question, phase, feedback, progress, play, chooseAnswer, next };
+  const resetProgress = useCallback(async () => {
+    await clearState();
+    const engine = new LearningEngine(createInitialState(Date.now()));
+    engineRef.current = engine;
+    setProgress(engine.getProgressSummary());
+    startNewQuestion(engine);
+  }, [startNewQuestion]);
+
+  return { loading, question, phase, feedback, progress, play, chooseAnswer, next, resetProgress };
 }

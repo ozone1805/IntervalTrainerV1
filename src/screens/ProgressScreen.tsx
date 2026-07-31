@@ -1,6 +1,18 @@
 import type { ProgressSummary } from "../learning/engine";
 
-export function ProgressScreen({ progress }: { progress: ProgressSummary }) {
+export function ProgressScreen({
+  progress,
+  onReset,
+}: {
+  progress: ProgressSummary;
+  onReset: () => void;
+}) {
+  const handleReset = () => {
+    if (window.confirm("Reset all progress? This clears your curriculum stage, mastery, and history.")) {
+      onReset();
+    }
+  };
+
   return (
     <div className="progress">
       <div className="stat-grid">
@@ -62,6 +74,10 @@ export function ProgressScreen({ progress }: { progress: ProgressSummary }) {
           </ul>
         )}
       </section>
+
+      <button className="btn reset-btn" onClick={handleReset}>
+        Reset progress
+      </button>
     </div>
   );
 }
