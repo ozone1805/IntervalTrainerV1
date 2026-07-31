@@ -9,7 +9,7 @@ function modeLabel(mode: "melodic" | "harmonic", direction: "up" | "down" | null
 }
 
 export function TrainingScreen({ engine }: { engine: Engine }) {
-  const { question, phase, feedback, play, chooseAnswer, submitGrade, next } = engine;
+  const { question, phase, feedback, play, chooseAnswer, next } = engine;
   const [hasPlayed, setHasPlayed] = useState(false);
   const [playing, setPlaying] = useState(false);
 
@@ -64,23 +64,6 @@ export function TrainingScreen({ engine }: { engine: Engine }) {
               Not quite. You answered {feedback.chosenLabel}; it was {feedback.correctLabel}.
             </p>
           )}
-        </div>
-      )}
-
-      {phase === "correct-pending-grade" && (
-        <div className="grade-row">
-          <p className="grade-prompt">How did that feel?</p>
-          <div className="choices">
-            <button className="btn" onClick={() => submitGrade("hard")}>
-              Hard
-            </button>
-            <button className="btn" onClick={() => submitGrade("good")}>
-              Good
-            </button>
-            <button className="btn" onClick={() => submitGrade("easy")}>
-              Easy
-            </button>
-          </div>
         </div>
       )}
 

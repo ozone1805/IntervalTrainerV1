@@ -17,8 +17,8 @@ export const STAGE_INTERVALS: number[][] = [
 export const MAX_STAGE = STAGE_INTERVALS.length - 1;
 
 /** Mastery an unlocked interval set needs (on average) before advancing. */
-const STAGE_ADVANCE_MASTERY = 75;
-const STAGE_ADVANCE_MIN_REVIEWS = 4;
+const STAGE_ADVANCE_MASTERY = 60;
+const STAGE_ADVANCE_MIN_REVIEWS = 3;
 
 /**
  * Direction/mode progression: everyone starts with ascending melodic only,

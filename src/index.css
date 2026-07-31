@@ -132,15 +132,6 @@ body {
   border: 1px solid rgba(255, 92, 92, 0.4);
 }
 
-.grade-row {
-  width: 100%;
-}
-
-.grade-prompt {
-  color: #a7abb5;
-  margin-bottom: 10px;
-}
-
 .next-btn {
   width: 100%;
   max-width: 360px;

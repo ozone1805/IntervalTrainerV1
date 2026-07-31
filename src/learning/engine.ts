@@ -27,6 +27,22 @@ export interface AnswerResult {
   skill: IntervalSkill;
 }
 
+/**
+ * Correct answers are graded by how fast they were made instead of asking
+ * the user to self-report — a quick answer implies confident recall, a slow
+ * one implies the interval was worked out rather than recognized. Timed from
+ * when the question first appears, so it includes the reaction time to hit
+ * "Play" as well as listening and thinking time.
+ */
+const FAST_RESPONSE_MS = 3500;
+const SLOW_RESPONSE_MS = 9000;
+
+export function gradeFromResponseTime(responseTimeMs: number): Grade {
+  if (responseTimeMs <= FAST_RESPONSE_MS) return "easy";
+  if (responseTimeMs <= SLOW_RESPONSE_MS) return "good";
+  return "hard";
+}
+
 export interface ProgressSummary {
   totalReviews: number;
   streak: number;
@@ -86,9 +102,9 @@ export class LearningEngine {
     return buildQuestion(id, semitones, this.state.confusion, now, rng);
   }
 
-  submitAnswer(question: Question, userSemitones: number, gradeIfCorrect: Grade | null, responseTimeMs: number, now: number): AnswerResult {
+  submitAnswer(question: Question, userSemitones: number, responseTimeMs: number, now: number): AnswerResult {
     const correct = userSemitones === question.id.semitones;
-    const grade: Grade = correct ? gradeIfCorrect ?? "good" : "again";
+    const grade: Grade = correct ? gradeFromResponseTime(responseTimeMs) : "again";
 
     const key = question.skillKey;
     const existing = this.state.skills[key] ?? createNewSkill(question.id, now);

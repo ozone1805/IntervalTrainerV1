@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { pianoEngine } from "../audio/pianoEngine";
 import { createInitialState, LearningEngine, type ProgressSummary } from "../learning/engine";
-import type { Grade, Question } from "../learning/types";
+import type { Question } from "../learning/types";
 import { getInterval } from "../music/intervals";
 import { loadState, saveState } from "../storage/db";
 
-export type AnswerPhase = "answering" | "correct-pending-grade" | "correct-done" | "incorrect";
+export type AnswerPhase = "answering" | "correct-done" | "incorrect";
 
 interface FeedbackInfo {
   correct: boolean;
@@ -21,7 +21,6 @@ interface FeedbackInfo {
 export function useLearningEngine() {
   const engineRef = useRef<LearningEngine | null>(null);
   const questionStartRef = useRef<number>(0);
-  const pendingRef = useRef<{ semitones: number; responseTimeMs: number } | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [question, setQuestion] = useState<Question | null>(null);
@@ -33,7 +32,6 @@ export function useLearningEngine() {
     const now = Date.now();
     const q = engine.nextQuestion(now);
     questionStartRef.current = now;
-    pendingRef.current = null;
     setQuestion(q);
     setPhase("answering");
     setFeedback(null);
@@ -67,40 +65,17 @@ export function useLearningEngine() {
       if (!engine || !question || phase !== "answering") return;
       const responseTimeMs = Date.now() - questionStartRef.current;
       const correct = semitones === question.id.semitones;
-
-      if (!correct) {
-        const now = Date.now();
-        const result = engine.submitAnswer(question, semitones, null, responseTimeMs, now);
-        void saveState(engine.getState());
-        setProgress(engine.getProgressSummary());
-        setFeedback({
-          correct: false,
-          correctLabel: getInterval(result.correctSemitones).shortName,
-          chosenLabel: getInterval(semitones).shortName,
-        });
-        setPhase("incorrect");
-      } else {
-        pendingRef.current = { semitones, responseTimeMs };
-        setFeedback({
-          correct: true,
-          correctLabel: getInterval(question.id.semitones).shortName,
-          chosenLabel: getInterval(semitones).shortName,
-        });
-        setPhase("correct-pending-grade");
-      }
-    },
-    [question, phase],
-  );
-
-  const submitGrade = useCallback(
-    (grade: Grade) => {
-      const engine = engineRef.current;
-      if (!engine || !question || !pendingRef.current || phase !== "correct-pending-grade") return;
       const now = Date.now();
-      engine.submitAnswer(question, pendingRef.current.semitones, grade, pendingRef.current.responseTimeMs, now);
+
+      const result = engine.submitAnswer(question, semitones, responseTimeMs, now);
       void saveState(engine.getState());
       setProgress(engine.getProgressSummary());
-      setPhase("correct-done");
+      setFeedback({
+        correct,
+        correctLabel: getInterval(result.correctSemitones).shortName,
+        chosenLabel: getInterval(semitones).shortName,
+      });
+      setPhase(correct ? "correct-done" : "incorrect");
     },
     [question, phase],
   );
@@ -111,5 +86,5 @@ export function useLearningEngine() {
     startNewQuestion(engine);
   }, [startNewQuestion]);
 
-  return { loading, question, phase, feedback, progress, play, chooseAnswer, submitGrade, next };
+  return { loading, question, phase, feedback, progress, play, chooseAnswer, next };
 }
