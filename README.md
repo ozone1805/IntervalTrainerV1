@@ -60,5 +60,7 @@ npm run build     # typecheck + production build
 
 ## Deployment
 
-Deploys as a static site (Vite build output in `dist/`) — works out of the box on Vercel:
-import this GitHub repo at vercel.com, framework preset "Vite", no environment variables needed.
+Not currently deployed anywhere — development and testing happen locally via `npm run dev`.
+
+`npm run build` produces a self-contained static site in `dist/`, so any static host will serve it
+as-is if that changes.
