@@ -36,6 +36,15 @@ export function getInterval(semitones: number): IntervalDef {
 export type Direction = "up" | "down";
 export type PlaybackMode = "melodic" | "harmonic";
 
+/**
+ * Whether an interval is presented as a bare dyad or inside an established
+ * key. Research on aural skills finds little carryover from isolated interval
+ * identification to real tonal listening — skilled listeners hear scale
+ * degrees against a tonic — so "the same" interval in a key is tracked as a
+ * genuinely different skill.
+ */
+export type ToneContext = "isolated" | "tonal";
+
 /** Note names for converting a MIDI number to a display/audio note string. */
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -51,4 +60,52 @@ export const ROOT_MIDI_MAX = 72; // C5
 
 export function randomRootMidi(rng: () => number = Math.random): number {
   return ROOT_MIDI_MIN + Math.floor(rng() * (ROOT_MIDI_MAX - ROOT_MIDI_MIN + 1));
+}
+
+/** Scale degrees of a major scale, as semitone offsets from the tonic. */
+const MAJOR_SCALE_PCS = [0, 2, 4, 5, 7, 9, 11];
+
+/** Keys are kept low so the establishing cadence sits under the interval itself. */
+const KEY_MIDI_MIN = 48; // C3
+const KEY_MIDI_MAX = 59; // B3
+
+export function randomKeyRootMidi(rng: () => number = Math.random): number {
+  return KEY_MIDI_MIN + Math.floor(rng() * (KEY_MIDI_MAX - KEY_MIDI_MIN + 1));
+}
+
+export function isDiatonic(midi: number, keyRootMidi: number): boolean {
+  const pitchClass = (((midi - keyRootMidi) % 12) + 12) % 12;
+  return MAJOR_SCALE_PCS.includes(pitchClass);
+}
+
+/** The second note of an interval, given how it will be played. */
+export function secondNoteMidi(rootMidi: number, semitones: number, direction: Direction | null): number {
+  return direction === "down" ? rootMidi - semitones : rootMidi + semitones;
+}
+
+/**
+ * Pick a root for a tonal-context question so that both notes land inside the
+ * key where possible. Some intervals sit on only a couple of scale degrees
+ * (a tritone in major exists only as scale degree 4→7), and a root that would
+ * put the second note outside the key is used only as a fallback — still far
+ * more tonally grounded than a dyad on a random root.
+ */
+export function contextualRootMidi(
+  semitones: number,
+  direction: Direction | null,
+  keyRootMidi: number,
+  rng: () => number = Math.random,
+): number {
+  const bothInKey: number[] = [];
+  const rootInKey: number[] = [];
+
+  for (let midi = ROOT_MIDI_MIN; midi <= ROOT_MIDI_MAX; midi++) {
+    if (!isDiatonic(midi, keyRootMidi)) continue;
+    rootInKey.push(midi);
+    if (isDiatonic(secondNoteMidi(midi, semitones, direction), keyRootMidi)) bothInKey.push(midi);
+  }
+
+  const pool = bothInKey.length > 0 ? bothInKey : rootInKey;
+  if (pool.length === 0) return randomRootMidi(rng);
+  return pool[Math.floor(rng() * pool.length)];
 }

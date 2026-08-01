@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
+import { getInterval, type Direction, type PlaybackMode, type ToneContext } from "../music/intervals";
 import type { useLearningEngine } from "../state/useLearningEngine";
 
 type Engine = ReturnType<typeof useLearningEngine>;
 
-function modeLabel(mode: "melodic" | "harmonic", direction: "up" | "down" | null): string {
-  if (mode === "harmonic") return "Harmonic";
-  return direction === "down" ? "Descending" : "Ascending";
+function modeLabel(mode: PlaybackMode, direction: Direction | null, context: ToneContext): string {
+  const shape = mode === "harmonic" ? "Harmonic" : direction === "down" ? "Descending" : "Ascending";
+  return context === "tonal" ? `${shape} interval, in key` : `${shape} interval`;
 }
 
 export function TrainingScreen({ engine }: { engine: Engine }) {
@@ -29,9 +30,18 @@ export function TrainingScreen({ engine }: { engine: Engine }) {
     }
   };
 
+  const answersDisabled = !hasPlayed || phase !== "answering";
+
   return (
     <div className="training">
-      <p className="mode-label">{modeLabel(question.id.mode, question.id.direction)} interval</p>
+      <p className="mode-label">{modeLabel(question.id.mode, question.id.direction, question.id.context)}</p>
+
+      {question.kind === "contrast" && (
+        <p className="prompt">
+          Two intervals, same starting note. Which one was the{" "}
+          <strong>{getInterval(question.targetSemitones).shortName}</strong>?
+        </p>
+      )}
 
       <div className="play-row">
         <button className="btn btn-primary" onClick={handlePlay} disabled={playing}>
@@ -43,27 +53,32 @@ export function TrainingScreen({ engine }: { engine: Engine }) {
       </div>
 
       <div className="choices">
-        {question.choices.map((choice) => (
-          <button
-            key={choice.semitones}
-            className="btn choice"
-            disabled={!hasPlayed || phase !== "answering"}
-            onClick={() => chooseAnswer(choice.semitones)}
-          >
-            {choice.label}
-          </button>
-        ))}
+        {question.kind === "contrast"
+          ? ([1, 2] as const).map((position) => (
+              <button
+                key={position}
+                className="btn choice"
+                disabled={answersDisabled}
+                onClick={() => chooseAnswer(position)}
+              >
+                {position === 1 ? "First" : "Second"}
+              </button>
+            ))
+          : question.choices.map((choice) => (
+              <button
+                key={choice.semitones}
+                className="btn choice"
+                disabled={answersDisabled}
+                onClick={() => chooseAnswer(choice.semitones)}
+              >
+                {choice.label}
+              </button>
+            ))}
       </div>
 
       {feedback && (
         <div className={`feedback ${feedback.correct ? "feedback-correct" : "feedback-incorrect"}`}>
-          {feedback.correct ? (
-            <p>Correct — that was a {feedback.correctLabel}.</p>
-          ) : (
-            <p>
-              Not quite. You answered {feedback.chosenLabel}; it was {feedback.correctLabel}.
-            </p>
-          )}
+          <p>{feedback.message}</p>
         </div>
       )}
 

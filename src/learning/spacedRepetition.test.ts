@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { createNewSkill, schedule } from "./spacedRepetition";
 
-const ID = { semitones: 5, mode: "melodic" as const, direction: "up" as const };
+const ID = {
+  semitones: 5,
+  mode: "melodic" as const,
+  direction: "up" as const,
+  context: "isolated" as const,
+};
 const NOW = 1_700_000_000_000;
 
 describe("spaced repetition scheduler", () => {

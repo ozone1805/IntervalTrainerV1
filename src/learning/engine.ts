@@ -1,16 +1,19 @@
 import {
+  maybeAdvanceContextStage,
   maybeAdvanceModeStage,
   maybeAdvanceStage,
+  unlockedContexts,
   unlockedModes,
   unlockedSemitones,
   unlockedSkillIds,
 } from "./curriculum";
 import { recordConfusion, topConfusionPairs } from "./confusion";
 import { updateMastery } from "./mastery";
-import { buildQuestion, chooseNextSkill } from "./sessionPlanner";
+import { planQuestion } from "./sessionPlanner";
 import { createNewSkill, schedule } from "./spacedRepetition";
 import {
   skillKey,
+  STATE_VERSION,
   type EngineState,
   type Grade,
   type IntervalSkill,
@@ -59,6 +62,7 @@ function todayKey(now: number): string {
 
 export function createInitialState(now: number, id = "local-user"): EngineState {
   return {
+    version: STATE_VERSION,
     meta: {
       id,
       createdAt: now,
@@ -67,6 +71,7 @@ export function createInitialState(now: number, id = "local-user"): EngineState 
       lastSessionDate: null,
       curriculumStage: 0,
       modeStage: 0,
+      contextStage: 0,
     },
     skills: {},
     confusion: {},
@@ -97,13 +102,29 @@ export class LearningEngine {
 
   nextQuestion(now: number, rng: () => number = Math.random): Question {
     const unlocked = this.unlockedIds();
-    const id = chooseNextSkill(this.state, unlocked, now, rng);
     const semitones = unlockedSemitones(this.state.meta.curriculumStage);
-    return buildQuestion(id, semitones, this.state.confusion, now, rng);
+    const { question, session } = planQuestion(this.state, unlocked, semitones, now, rng);
+    this.state = { ...this.state, session };
+    return question;
   }
 
-  submitAnswer(question: Question, userSemitones: number, responseTimeMs: number, now: number): AnswerResult {
-    const correct = userSemitones === question.id.semitones;
+  /**
+   * Record an answer. `answer` is the chosen interval in semitones for an
+   * identify question, or the chosen position (1 or 2) for a contrast trial.
+   */
+  submitAnswer(question: Question, answer: number, responseTimeMs: number, now: number): AnswerResult {
+    const correct =
+      question.kind === "contrast" ? answer === question.targetPosition : answer === question.id.semitones;
+
+    // Picking the wrong half of a contrast trial *is* mistaking one interval
+    // for the other, so it feeds the confusion matrix the same way.
+    const userSemitones =
+      question.kind === "contrast"
+        ? correct
+          ? question.targetSemitones
+          : question.otherSemitones
+        : answer;
+
     const grade: Grade = correct ? gradeFromResponseTime(responseTimeMs) : "again";
 
     const key = question.skillKey;
@@ -122,6 +143,7 @@ export class LearningEngine {
       semitones: question.id.semitones,
       mode: question.id.mode,
       direction: question.id.direction,
+      context: question.id.context,
       correctSemitones: question.id.semitones,
       userSemitones,
       correct,
@@ -162,20 +184,36 @@ export class LearningEngine {
     const meta = this.state.meta;
     const stageSemitones = unlockedSemitones(meta.curriculumStage);
     const currentModes = unlockedModes(meta.modeStage);
+    const currentContexts = unlockedContexts(meta.contextStage);
 
     const unlockedSkills = stageSemitones.flatMap((s) =>
-      currentModes
-        .map((m) => this.state.skills[skillKey({ semitones: s, mode: m.mode, direction: m.direction })])
-        .filter((sk): sk is IntervalSkill => !!sk),
+      currentModes.flatMap((m) =>
+        currentContexts
+          .map(
+            (context) =>
+              this.state.skills[skillKey({ semitones: s, mode: m.mode, direction: m.direction, context })],
+          )
+          .filter((sk): sk is IntervalSkill => !!sk),
+      ),
     );
 
     const nextStage = maybeAdvanceStage(meta, unlockedSkills);
     const nextModeStage = maybeAdvanceModeStage(meta.modeStage, unlockedSkills);
+    const nextContextStage = maybeAdvanceContextStage(meta.contextStage, meta.modeStage, unlockedSkills);
 
-    if (nextStage !== meta.curriculumStage || nextModeStage !== meta.modeStage) {
+    if (
+      nextStage !== meta.curriculumStage ||
+      nextModeStage !== meta.modeStage ||
+      nextContextStage !== meta.contextStage
+    ) {
       this.state = {
         ...this.state,
-        meta: { ...meta, curriculumStage: nextStage, modeStage: nextModeStage },
+        meta: {
+          ...meta,
+          curriculumStage: nextStage,
+          modeStage: nextModeStage,
+          contextStage: nextContextStage,
+        },
       };
     }
   }
@@ -191,7 +229,8 @@ export class LearningEngine {
       const interval = getInterval(skill.id.semitones);
       const dir = skill.id.direction ? ` ${skill.id.direction === "up" ? "asc" : "desc"}` : "";
       const mode = skill.id.mode === "harmonic" ? " harmonic" : "";
-      return `${interval.shortName}${dir}${mode}`;
+      const context = skill.id.context === "tonal" ? " in key" : "";
+      return `${interval.shortName}${dir}${mode}${context}`;
     };
 
     const bySkill = [...reviewed].sort((a, b) => b.mastery - a.mastery);

@@ -9,8 +9,25 @@ export type AnswerPhase = "answering" | "correct-done" | "incorrect";
 
 interface FeedbackInfo {
   correct: boolean;
-  correctLabel: string;
-  chosenLabel: string;
+  message: string;
+}
+
+const POSITION_WORDS = ["", "first", "second"] as const;
+
+function describeAnswer(question: Question, answer: number, correct: boolean): string {
+  const name = (semitones: number) => getInterval(semitones).shortName;
+
+  if (question.kind === "contrast") {
+    const where = POSITION_WORDS[question.targetPosition];
+    const target = name(question.targetSemitones);
+    return correct
+      ? `Correct — the ${target} was ${where}.`
+      : `Not quite. The ${target} was ${where}; the other was a ${name(question.otherSemitones)}.`;
+  }
+
+  return correct
+    ? `Correct — that was a ${name(question.id.semitones)}.`
+    : `Not quite. You answered ${name(answer)}; it was ${name(question.id.semitones)}.`;
 }
 
 /**
@@ -56,26 +73,32 @@ export function useLearningEngine() {
 
   const play = useCallback(async () => {
     if (!question) return;
-    await pianoEngine.playInterval(question.rootMidi, question.id.semitones, question.id.mode, question.id.direction);
+    const { rootMidi, keyRootMidi, id } = question;
+
+    if (question.kind === "contrast") {
+      const targetFirst = question.targetPosition === 1;
+      const first = targetFirst ? question.targetSemitones : question.otherSemitones;
+      const second = targetFirst ? question.otherSemitones : question.targetSemitones;
+      await pianoEngine.playContrast(rootMidi, first, second, id.mode, id.direction, id.context, keyRootMidi);
+      return;
+    }
+
+    await pianoEngine.playInterval(rootMidi, id.semitones, id.mode, id.direction, id.context, keyRootMidi);
   }, [question]);
 
+  /** `answer` is a semitone count for identify questions, a position for contrast trials. */
   const chooseAnswer = useCallback(
-    (semitones: number) => {
+    (answer: number) => {
       const engine = engineRef.current;
       if (!engine || !question || phase !== "answering") return;
       const responseTimeMs = Date.now() - questionStartRef.current;
-      const correct = semitones === question.id.semitones;
       const now = Date.now();
 
-      const result = engine.submitAnswer(question, semitones, responseTimeMs, now);
+      const result = engine.submitAnswer(question, answer, responseTimeMs, now);
       void saveState(engine.getState());
       setProgress(engine.getProgressSummary());
-      setFeedback({
-        correct,
-        correctLabel: getInterval(result.correctSemitones).shortName,
-        chosenLabel: getInterval(semitones).shortName,
-      });
-      setPhase(correct ? "correct-done" : "incorrect");
+      setFeedback({ correct: result.correct, message: describeAnswer(question, answer, result.correct) });
+      setPhase(result.correct ? "correct-done" : "incorrect");
     },
     [question, phase],
   );

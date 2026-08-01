@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInitialState, LearningEngine } from "./engine";
+import type { IdentifyQuestion, Question } from "./types";
 
 function seededRng(seed: number): () => number {
   let s = seed;
@@ -9,15 +10,22 @@ function seededRng(seed: number): () => number {
   };
 }
 
+/** Contrast trials only appear once a pair is confused, so these cases are all identify. */
+function asIdentify(q: Question): IdentifyQuestion {
+  if (q.kind !== "identify") throw new Error(`expected an identify question, got ${q.kind}`);
+  return q;
+}
+
 describe("LearningEngine", () => {
   it("only offers stage-0 intervals (P4/P5, ascending) at the start", () => {
     const engine = new LearningEngine(createInitialState(0));
     const rng = seededRng(1);
     for (let i = 0; i < 10; i++) {
-      const q = engine.nextQuestion(i * 1000, rng);
+      const q = asIdentify(engine.nextQuestion(i * 1000, rng));
       expect([5, 7]).toContain(q.id.semitones);
       expect(q.id.mode).toBe("melodic");
       expect(q.id.direction).toBe("up");
+      expect(q.id.context).toBe("isolated");
       expect(q.choices.some((c) => c.semitones === q.id.semitones)).toBe(true);
     }
   });
@@ -25,7 +33,7 @@ describe("LearningEngine", () => {
   it("records confusion when the user answers incorrectly", () => {
     const engine = new LearningEngine(createInitialState(0));
     const rng = seededRng(2);
-    const q = engine.nextQuestion(0, rng);
+    const q = asIdentify(engine.nextQuestion(0, rng));
     const wrongChoice = q.choices.find((c) => c.semitones !== q.id.semitones)!;
     const result = engine.submitAnswer(q, wrongChoice.semitones, 1500, 0);
     expect(result.correct).toBe(false);

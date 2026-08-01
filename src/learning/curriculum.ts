@@ -1,5 +1,5 @@
-import type { Direction, PlaybackMode } from "../music/intervals";
-import type { IntervalSkill, ModeStage, SkillId, UserMeta } from "./types";
+import type { Direction, PlaybackMode, ToneContext } from "../music/intervals";
+import type { ContextStage, IntervalSkill, ModeStage, SkillId, UserMeta } from "./types";
 
 /**
  * Progressive interval introduction (spec section 6). Each stage adds more
@@ -28,6 +28,14 @@ const STAGE_ADVANCE_MIN_REVIEWS = 3;
 const MODE_UNLOCK_MASTERY = 70;
 const MODE_UNLOCK_MIN_REVIEWS = 6;
 
+/**
+ * Tonal context is the last thing to unlock: hearing an interval against an
+ * established key is the skill that actually transfers to real listening, but
+ * it only makes sense once the raw intervals are recognizable in every mode.
+ */
+const CONTEXT_UNLOCK_MASTERY = 75;
+const CONTEXT_UNLOCK_MIN_REVIEWS = 8;
+
 export function unlockedSemitones(stage: number): number[] {
   return STAGE_INTERVALS[Math.min(stage, MAX_STAGE)];
 }
@@ -41,14 +49,21 @@ export function unlockedModes(modeStage: ModeStage): { mode: PlaybackMode; direc
   return combos;
 }
 
-/** All (interval, mode, direction) skill ids currently unlocked for a user. */
+export function unlockedContexts(contextStage: ContextStage): ToneContext[] {
+  return contextStage >= 1 ? ["isolated", "tonal"] : ["isolated"];
+}
+
+/** All (interval, mode, direction, context) skill ids currently unlocked for a user. */
 export function unlockedSkillIds(meta: UserMeta, modeStage: ModeStage): SkillId[] {
   const semitones = unlockedSemitones(meta.curriculumStage);
   const modes = unlockedModes(modeStage);
+  const contexts = unlockedContexts(meta.contextStage);
   const ids: SkillId[] = [];
   for (const s of semitones) {
     for (const m of modes) {
-      ids.push({ semitones: s, mode: m.mode, direction: m.direction });
+      for (const context of contexts) {
+        ids.push({ semitones: s, mode: m.mode, direction: m.direction, context });
+      }
     }
   }
   return ids;
@@ -93,4 +108,24 @@ export function maybeAdvanceModeStage(modeStage: ModeStage, skillsForUnlockedMod
     return (modeStage + 1) as ModeStage;
   }
   return modeStage;
+}
+
+/**
+ * Decide whether to start presenting intervals inside an established key.
+ * Gated behind the full mode ladder so the user isn't learning "what a
+ * descending m6 sounds like" and "what it sounds like as scale degree 6→1"
+ * at the same time.
+ */
+export function maybeAdvanceContextStage(
+  contextStage: ContextStage,
+  modeStage: ModeStage,
+  skillsForUnlockedContexts: IntervalSkill[],
+): ContextStage {
+  if (contextStage >= 1 || modeStage < 2) return contextStage;
+  const avg = averageMastery(skillsForUnlockedContexts);
+  if (avg === null) return contextStage;
+  if (avg >= CONTEXT_UNLOCK_MASTERY && minReviews(skillsForUnlockedContexts) >= CONTEXT_UNLOCK_MIN_REVIEWS) {
+    return 1;
+  }
+  return contextStage;
 }

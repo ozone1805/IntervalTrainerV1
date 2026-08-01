@@ -99,6 +99,18 @@ body {
   font-size: 0.8rem;
 }
 
+.prompt {
+  max-width: 360px;
+  margin: 0;
+  text-align: center;
+  color: #d6d9e0;
+  line-height: 1.5;
+}
+
+.prompt strong {
+  color: #fff;
+}
+
 .play-row {
   display: flex;
   gap: 12px;

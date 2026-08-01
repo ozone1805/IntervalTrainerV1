@@ -1,4 +1,5 @@
 import { openDB, type IDBPDatabase } from "idb";
+import { migrateState } from "../learning/migration";
 import type { EngineState } from "../learning/types";
 
 const DB_NAME = "interval-trainer";
@@ -30,8 +31,12 @@ function getDb(): Promise<IDBPDatabase> {
  */
 export async function loadState(): Promise<EngineState | null> {
   const db = await getDb();
-  const state = await db.get(STORE, STATE_KEY);
-  return state ?? null;
+  const raw = await db.get(STORE, STATE_KEY);
+  const state = migrateState(raw);
+  // migrateState hands back the same object when nothing changed, so this
+  // writes exactly once per upgrade rather than on every load.
+  if (state && state !== raw) await db.put(STORE, state, STATE_KEY);
+  return state;
 }
 
 export async function saveState(state: EngineState): Promise<void> {

@@ -1,5 +1,11 @@
 import * as Tone from "tone";
-import { midiToNoteName, type Direction, type PlaybackMode } from "../music/intervals";
+import {
+  midiToNoteName,
+  secondNoteMidi,
+  type Direction,
+  type PlaybackMode,
+  type ToneContext,
+} from "../music/intervals";
 
 const SALAMANDER_BASE_URL = "https://tonejs.github.io/audio/salamander/";
 
@@ -39,6 +45,18 @@ const SAMPLE_URLS: Record<string, string> = {
 const NOTE_DURATION_SECONDS = 0.9;
 const MELODIC_GAP_SECONDS = 0.55;
 
+/** Long enough that the two halves of a contrast trial read as separate items. */
+const CONTRAST_GAP_SECONDS = 1.4;
+
+/** I–V–I, as semitone offsets from the key's tonic. */
+const CADENCE_CHORDS = [
+  [0, 4, 7],
+  [7, 11, 14],
+  [0, 4, 7],
+];
+const CADENCE_CHORD_SECONDS = 0.5;
+const CADENCE_TAIL_SECONDS = 0.45;
+
 /**
  * Thin wrapper around a Tone.js sampled piano. Kept isolated from the
  * learning engine and UI: it only knows how to turn (root note, semitone
@@ -64,26 +82,94 @@ export class PianoEngine {
     await this.loadPromise;
   }
 
-  async playInterval(rootMidi: number, semitones: number, mode: PlaybackMode, direction: Direction | null): Promise<void> {
-    await this.ensureReady();
-    const sampler = this.sampler;
-    if (!sampler) return;
+  /**
+   * Play a I–V–I cadence to plant a tonic before the interval itself, and
+   * return how long it takes so the caller can schedule what follows.
+   */
+  private scheduleCadence(sampler: Tone.Sampler, keyRootMidi: number, at: number): number {
+    CADENCE_CHORDS.forEach((offsets, i) => {
+      const notes = offsets.map((o) => midiToNoteName(keyRootMidi + o));
+      sampler.triggerAttackRelease(notes, CADENCE_CHORD_SECONDS, at + i * CADENCE_CHORD_SECONDS);
+    });
+    return CADENCE_CHORDS.length * CADENCE_CHORD_SECONDS + CADENCE_TAIL_SECONDS;
+  }
 
-    const secondMidi = direction === "down" ? rootMidi - semitones : rootMidi + semitones;
+  /** Schedule one interval, returning how long it occupies. */
+  private scheduleInterval(
+    sampler: Tone.Sampler,
+    rootMidi: number,
+    semitones: number,
+    mode: PlaybackMode,
+    direction: Direction | null,
+    at: number,
+  ): number {
     const rootNote = midiToNoteName(rootMidi);
-    const secondNote = midiToNoteName(secondMidi);
+    const secondNote = midiToNoteName(secondNoteMidi(rootMidi, semitones, direction));
 
-    const now = Tone.now();
     if (mode === "harmonic") {
-      sampler.triggerAttackRelease([rootNote, secondNote], NOTE_DURATION_SECONDS, now);
-      return;
+      sampler.triggerAttackRelease([rootNote, secondNote], NOTE_DURATION_SECONDS, at);
+      return NOTE_DURATION_SECONDS;
     }
 
     // Melodic: for "down" we still play root-then-target in the order the
     // ear should hear them, i.e. the actual first note is `rootMidi` and the
     // second is `secondMidi`, regardless of which is numerically higher.
-    sampler.triggerAttackRelease(rootNote, NOTE_DURATION_SECONDS, now);
-    sampler.triggerAttackRelease(secondNote, NOTE_DURATION_SECONDS, now + MELODIC_GAP_SECONDS);
+    sampler.triggerAttackRelease(rootNote, NOTE_DURATION_SECONDS, at);
+    sampler.triggerAttackRelease(secondNote, NOTE_DURATION_SECONDS, at + MELODIC_GAP_SECONDS);
+    return MELODIC_GAP_SECONDS + NOTE_DURATION_SECONDS;
+  }
+
+  async playInterval(
+    rootMidi: number,
+    semitones: number,
+    mode: PlaybackMode,
+    direction: Direction | null,
+    context: ToneContext = "isolated",
+    keyRootMidi?: number,
+  ): Promise<void> {
+    await this.ensureReady();
+    const sampler = this.sampler;
+    if (!sampler) return;
+
+    let at = Tone.now();
+    if (context === "tonal" && keyRootMidi !== undefined) {
+      at += this.scheduleCadence(sampler, keyRootMidi, at);
+    }
+    this.scheduleInterval(sampler, rootMidi, semitones, mode, direction, at);
+  }
+
+  /**
+   * Play two intervals back to back over the same root. Sharing the root is
+   * the point: it leaves the distance between the notes as the only thing
+   * that differs, which is what makes the pair discriminable.
+   */
+  async playContrast(
+    rootMidi: number,
+    firstSemitones: number,
+    secondSemitones: number,
+    mode: PlaybackMode,
+    direction: Direction | null,
+    context: ToneContext = "isolated",
+    keyRootMidi?: number,
+  ): Promise<void> {
+    await this.ensureReady();
+    const sampler = this.sampler;
+    if (!sampler) return;
+
+    let at = Tone.now();
+    if (context === "tonal" && keyRootMidi !== undefined) {
+      at += this.scheduleCadence(sampler, keyRootMidi, at);
+    }
+
+    const firstLength = this.scheduleInterval(sampler, rootMidi, firstSemitones, mode, direction, at);
+    this.scheduleInterval(
+      sampler,
+      rootMidi,
+      secondSemitones,
+      mode,
+      direction,
+      at + firstLength + CONTRAST_GAP_SECONDS,
+    );
   }
 }
 
