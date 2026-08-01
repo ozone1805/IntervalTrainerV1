@@ -40,10 +40,10 @@ The app should run in:
 * Firefox
 * Edge
 
-The MVP should be deployable through:
+The MVP runs locally via the Vite dev server, with source hosted in a GitHub repository.
 
-* GitHub repository
-* Vercel hosting
+There is no hosted deployment: the build output is a self-contained static site, so putting it
+behind a static host later is a deployment decision rather than a product one.
 
 No mobile app is required for v1.
 
@@ -505,10 +505,9 @@ Persistence:
 
 ## Phase 6
 
-Deployment:
+Source control:
 
 * GitHub
-* Vercel
 
 ---
 
