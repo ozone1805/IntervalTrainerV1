@@ -99,18 +99,6 @@ body {
   font-size: 0.8rem;
 }
 
-.prompt {
-  max-width: 360px;
-  margin: 0;
-  text-align: center;
-  color: #d6d9e0;
-  line-height: 1.5;
-}
-
-.prompt strong {
-  color: #fff;
-}
-
 .play-row {
   display: flex;
   gap: 12px;
@@ -128,6 +116,15 @@ body {
   font-weight: 600;
 }
 
+/* Ruled out by a wrong guess, but still legible — the point of a retry is to
+   choose against what you already eliminated. */
+.choice-eliminated:disabled {
+  opacity: 0.55;
+  color: #ff8c8c;
+  border-color: rgba(255, 92, 92, 0.45);
+  text-decoration: line-through;
+}
+
 .feedback {
   padding: 14px 18px;
   border-radius: 10px;
@@ -142,11 +139,6 @@ body {
 .feedback-incorrect {
   background: rgba(255, 92, 92, 0.15);
   border: 1px solid rgba(255, 92, 92, 0.4);
-}
-
-.next-btn {
-  width: 100%;
-  max-width: 360px;
 }
 
 .progress {
@@ -193,6 +185,28 @@ body {
 
 .reset-btn:hover:not(:disabled) {
   background: rgba(255, 92, 92, 0.1);
+}
+
+.reset-confirm {
+  border: 1px solid rgba(255, 92, 92, 0.4);
+  background: rgba(255, 92, 92, 0.08);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.reset-confirm p {
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.reset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.reset-actions .reset-btn {
+  align-self: auto;
 }
 
 .mastery-list,

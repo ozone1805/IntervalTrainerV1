@@ -14,7 +14,7 @@ React + TypeScript + Vite, Tone.js (piano samples), IndexedDB for local persiste
   - `curriculum.ts` — progressive interval/mode/context unlocking
   - `mastery.ts` — mastery scoring
   - `spacedRepetition.ts` — Anki-style SM-2 scheduler
-  - `confusion.ts` — confusion matrix tracking and contrast-pair selection
+  - `confusion.ts` — confusion matrix tracking, used to prioritize reviews and pick distractors
   - `sessionPlanner.ts` — picks the next skill and decides how to present it
   - `migration.ts` — forward migration of persisted state between versions
   - `engine.ts` — `LearningEngine` facade that orchestrates the above
@@ -32,17 +32,32 @@ A **skill** is one (interval, mode, direction, context) combination, tracked ind
 spec's generalization model. Three ladders unlock in sequence: intervals (P4/P5 → +M3 → +m3 → …),
 then modes (ascending → +descending → +harmonic), then tonal context.
 
-Two ideas from the learning-science literature shape how questions are chosen, beyond plain SM-2:
+Every question is the same shape: hear one interval, name it from four choices. Three further
+ideas shape how those questions are chosen and presented, beyond plain SM-2:
 
-- **Contrast trials.** Spacing two confusable items apart in time does not teach the distinction
-  between them; juxtaposing them does (the discriminative-contrast effect — Kornell & Bjork 2008,
-  and Kang & Pashler 2012, where interleaving helped but temporal spacing alone did not). Once a
-  pair is muddled often enough, it is sometimes served as an A/B trial that plays both intervals
-  back to back over the same root. Confusion is counted symmetrically, since mixing up P4 and P5 in
-  both directions is one confusion, not two mild ones.
+- **Confusion-driven distractors.** The intervals a target is most often mistaken for are the ones
+  offered alongside it, so the choice list keeps posing the distinction the user actually finds
+  hard rather than an easy one.
 - **Blocked introduction.** Interleaving pays off for confusable items, but blocking is better for
   establishing a brand new one, so a freshly unlocked skill gets a short consecutive burst before
   entering the mix.
+- **Retry instead of reveal.** A wrong answer crosses that choice off and lets the user listen
+  again and pick again, rather than ending the question with the answer. Only the first attempt is
+  graded — a retry cannot earn back the review — but each wrong guess still feeds the confusion
+  matrix.
+- **Pace that follows the user.** Every ladder is gated on average mastery plus a floor on how many
+  times each skill has been reviewed. Those gates shrink as `meta.answerStreak` — consecutive
+  first-attempt correct answers — grows, reaching roughly half their normal size at a run of 12.
+  Mastery still has to be earned and a single miss resets the run to 0, so this shortens the wait
+  without skipping the evidence. A skill that graduates out of the learning steps also satisfies
+  the review floor outright: an instantly-recognized interval gets parked on a multi-day SM-2
+  interval and stops being offered, so counting raw repetitions would hold the sharpest user back
+  the hardest.
+
+Answers are graded on **thinking time only** — the clock starts when the interval has finished
+sounding, so a long tonal cadence costs the user nothing and answering before the last note fades
+reads as instant recognition. Replaying does not restart it, since needing another listen is
+exactly the hesitation the grade is for.
 
 - **Tonal context** is the last ladder because isolated interval identification transfers poorly to
   real musical listening — skilled listeners hear scale degrees against a tonic (Karpinski, *Aural

@@ -5,13 +5,11 @@ import {
   randomKeyRootMidi,
   randomRootMidi,
 } from "../music/intervals";
-import { confusionScoreFor, eligibleContrastPairs, topConfusionsFor } from "./confusion";
+import { confusionScoreFor, topConfusionsFor } from "./confusion";
 import {
   skillKey,
   type ConfusionRecord,
-  type ContrastQuestion,
   type EngineState,
-  type IdentifyQuestion,
   type IntervalSkill,
   type Question,
   type SessionPlan,
@@ -23,16 +21,10 @@ const CHOICES_PER_QUESTION = 4;
 /**
  * How many times in a row a freshly introduced skill is repeated. Blocked
  * practice is the right shape for a brand new item — it establishes what the
- * thing sounds like. Interleaving pays off later, once the item is confusable
- * with something else, which is what contrast trials below are for.
+ * thing sounds like; interleaving pays off later, once it has to be told apart
+ * from its neighbours.
  */
 export const INTRO_BLOCK_SIZE = 3;
-
-/** Mistakes on a pair before it becomes worth drilling side by side. */
-export const CONTRAST_THRESHOLD = 2;
-
-/** Share of eligible questions turned into contrast trials. */
-const CONTRAST_PROBABILITY = 1 / 3;
 
 interface Candidate {
   id: SkillId;
@@ -46,6 +38,18 @@ export interface SkillChoice {
 
 function overdueMinutes(skill: IntervalSkill, now: number): number {
   return Math.max(0, (now - skill.nextReview) / 60000);
+}
+
+/**
+ * Drop whichever skill was just asked, keeping it only if it is genuinely the
+ * last resort. Two identical questions back to back read as the app being
+ * stuck — the exception being a blocked introduction, which is deliberately
+ * repetitive and skips this.
+ */
+function excludingLast<T extends { id: SkillId }>(candidates: T[], lastKey: string | undefined): T[] {
+  if (!lastKey || candidates.length < 2) return candidates;
+  const rest = candidates.filter((c) => skillKey(c.id) !== lastKey);
+  return rest.length > 0 ? rest : candidates;
 }
 
 function pickRootMidi(id: SkillId, keyRootMidi: number, rng: () => number): number {
@@ -86,7 +90,16 @@ export function chooseNextSkill(
     }
   }
 
-  const due = candidates.filter((c) => c.skill && c.skill.nextReview <= now) as Array<{
+  const lastKey = state.reviewEvents[state.reviewEvents.length - 1]?.skillKey;
+
+  // The skill just asked is never re-served from here, even when it is the
+  // only thing due. Learning steps are measured in minutes, so a skill the
+  // user keeps getting wrong comes due again immediately and would otherwise
+  // monopolize the session — the user drills one interval over and over while
+  // the rest of the stage is never even introduced.
+  const due = candidates.filter(
+    (c) => c.skill && c.skill.nextReview <= now && skillKey(c.id) !== lastKey,
+  ) as Array<{
     id: SkillId;
     skill: IntervalSkill;
   }>;
@@ -113,7 +126,7 @@ export function chooseNextSkill(
     };
   }
 
-  const known = candidates as Array<{ id: SkillId; skill: IntervalSkill }>;
+  const known = excludingLast(candidates as Array<{ id: SkillId; skill: IntervalSkill }>, lastKey);
   const sorted = [...known].sort((a, b) => a.skill.mastery - b.skill.mastery);
   const pool = sorted.slice(0, Math.min(3, sorted.length));
   return { id: pool[Math.floor(rng() * pool.length)].id, session: undefined };
@@ -130,7 +143,7 @@ export function buildQuestion(
   confusion: Record<string, ConfusionRecord>,
   now: number,
   rng: () => number = Math.random,
-): IdentifyQuestion {
+): Question {
   const others = unlockedSemitones.filter((s) => s !== id.semitones);
   const distractors: number[] = [];
 
@@ -165,7 +178,6 @@ export function buildQuestion(
   const keyRootMidi = randomKeyRootMidi(rng);
 
   return {
-    kind: "identify",
     skillKey: skillKey(id),
     id,
     rootMidi: pickRootMidi(id, keyRootMidi, rng),
@@ -175,36 +187,7 @@ export function buildQuestion(
   };
 }
 
-/**
- * Build an A/B trial that plays `id`'s interval and `otherSemitones` back to
- * back over a shared root, so the only thing that differs between the two is
- * the distance being learned.
- */
-export function buildContrastQuestion(
-  id: SkillId,
-  otherSemitones: number,
-  now: number,
-  rng: () => number = Math.random,
-): ContrastQuestion {
-  const keyRootMidi = randomKeyRootMidi(rng);
-  return {
-    kind: "contrast",
-    skillKey: skillKey(id),
-    id,
-    rootMidi: pickRootMidi(id, keyRootMidi, rng),
-    keyRootMidi,
-    targetSemitones: id.semitones,
-    otherSemitones,
-    targetPosition: rng() < 0.5 ? 1 : 2,
-    createdAt: now,
-  };
-}
-
-/**
- * Pick the next skill and decide how to present it. A skill whose interval is
- * badly muddled with another unlocked one is sometimes served as a contrast
- * trial instead of a plain identification.
- */
+/** Pick the next skill to test and build a question for it. */
 export function planQuestion(
   state: EngineState,
   unlockedIds: SkillId[],
@@ -213,17 +196,6 @@ export function planQuestion(
   rng: () => number = Math.random,
 ): { question: Question; session: SessionPlan | undefined } {
   const { id, session } = chooseNextSkill(state, unlockedIds, now, rng);
-
-  // A blocked burst is deliberately *not* interleaved, so never contrast it.
-  if (!session) {
-    const pairs = eligibleContrastPairs(state.confusion, unlockedSemitones, CONTRAST_THRESHOLD);
-    const pair = pairs.find((p) => p.a === id.semitones || p.b === id.semitones);
-    if (pair && rng() < CONTRAST_PROBABILITY) {
-      const other = pair.a === id.semitones ? pair.b : pair.a;
-      return { question: buildContrastQuestion(id, other, now, rng), session };
-    }
-  }
-
   return { question: buildQuestion(id, unlockedSemitones, state.confusion, now, rng), session };
 }
 

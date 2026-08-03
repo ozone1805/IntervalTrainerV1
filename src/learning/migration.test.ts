@@ -53,6 +53,7 @@ describe("state migration", () => {
     const migrated = migrateState(structuredClone(V0_STATE))!;
 
     expect(migrated.meta.contextStage).toBe(0);
+    expect(migrated.meta.answerStreak).toBe(0);
     expect(migrated.meta.totalReviews).toBe(42);
     expect(migrated.meta.curriculumStage).toBe(2);
     expect(migrated.confusion["5->7"].count).toBe(4);

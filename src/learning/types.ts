@@ -75,6 +75,12 @@ export interface UserMeta {
   totalReviews: number;
   streak: number;
   lastSessionDate: string | null; // yyyy-mm-dd, for streak tracking
+  /**
+   * Consecutive first-attempt correct answers, reset to 0 by any miss. Drives
+   * how fast the curriculum unlocks — see `pace` in curriculum.ts. Distinct
+   * from `streak`, which counts days.
+   */
+  answerStreak: number;
   curriculumStage: number;
   modeStage: ModeStage;
   contextStage: ContextStage;
@@ -91,7 +97,7 @@ export interface SessionPlan {
 }
 
 /** Bumped when the shape of persisted state changes; see migrateState. */
-export const STATE_VERSION = 1;
+export const STATE_VERSION = 2;
 
 export interface EngineState {
   version: number;
@@ -107,34 +113,13 @@ export interface AnswerChoice {
   label: string;
 }
 
-interface QuestionBase {
+/** Hear one interval, name it. */
+export interface Question {
   skillKey: string;
   id: SkillId;
   rootMidi: number;
   /** Tonic of the establishing cadence; ignored when context is "isolated". */
   keyRootMidi: number;
   createdAt: number;
-}
-
-/** Hear one interval, name it. */
-export interface IdentifyQuestion extends QuestionBase {
-  kind: "identify";
   choices: AnswerChoice[];
 }
-
-/**
- * Hear both halves of a confusion pair back to back over the same root, and
- * say which one was the target. Spacing two confusable items apart in time
- * does not teach the distinction between them — juxtaposing them does
- * (the discriminative-contrast effect), which is what this question type is
- * for. `id.semitones` is always `targetSemitones`, so the skill being
- * scheduled and scored is the target.
- */
-export interface ContrastQuestion extends QuestionBase {
-  kind: "contrast";
-  targetSemitones: number;
-  otherSemitones: number;
-  targetPosition: 1 | 2;
-}
-
-export type Question = IdentifyQuestion | ContrastQuestion;

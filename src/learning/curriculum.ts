@@ -21,6 +21,48 @@ const STAGE_ADVANCE_MASTERY = 60;
 const STAGE_ADVANCE_MIN_REVIEWS = 3;
 
 /**
+ * A run of first-attempt correct answers has to get this long before the
+ * curriculum starts moving faster — short enough to reward a user who
+ * already knows the material, long enough that a couple of lucky guesses
+ * from four choices does not trigger it.
+ */
+const PACE_STREAK_START = 4;
+
+/** Where the acceleration tops out. */
+const PACE_STREAK_FULL = 12;
+
+/** Points shaved off a mastery bar at full pace. */
+const PACE_MASTERY_RELIEF = 18;
+
+/** Fraction of a review-count floor that survives at full pace. */
+const PACE_REVIEW_FLOOR = 0.5;
+
+/**
+ * How far to fast-track a user, from 0 (normal pace) to 1 (as fast as the
+ * curriculum goes).
+ *
+ * The gates below exist to stop someone unlocking new material on the back of
+ * a lucky guess. An unbroken run of first-attempt correct answers *is* that
+ * evidence, so continuing to demand the full review count on top of it is
+ * padding — and padding is what makes an ear trainer boring. At full pace the
+ * gates roughly halve, which is a real speed-up without being a skip: mastery
+ * still has to be earned, and a single miss drops the streak to 0 and puts the
+ * full gates back.
+ */
+export function pace(answerStreak: number): number {
+  const span = PACE_STREAK_FULL - PACE_STREAK_START;
+  return Math.min(1, Math.max(0, (answerStreak - PACE_STREAK_START) / span));
+}
+
+function masteryGate(base: number, answerStreak: number): number {
+  return base - pace(answerStreak) * PACE_MASTERY_RELIEF;
+}
+
+function reviewGate(base: number, answerStreak: number): number {
+  return Math.max(1, Math.ceil(base * (1 - pace(answerStreak) * (1 - PACE_REVIEW_FLOOR))));
+}
+
+/**
  * Direction/mode progression: everyone starts with ascending melodic only,
  * then descending is unlocked, then harmonic — mirroring the "don't
  * overwhelm the user with all three modes at once" guidance in the spec.
@@ -75,9 +117,20 @@ function averageMastery(skills: IntervalSkill[]): number | null {
   return reviewed.reduce((sum, s) => sum + s.mastery, 0) / reviewed.length;
 }
 
-function minReviews(skills: IntervalSkill[]): number {
-  if (skills.length === 0) return 0;
-  return Math.min(...skills.map((s) => s.correctCount + s.incorrectCount));
+/**
+ * Whether every skill has been seen enough times to trust the mastery average
+ * above it — either by being reviewed `gate` times, or by having graduated out
+ * of the learning steps entirely.
+ *
+ * That second route matters more than it looks. A skill answered instantly
+ * grades "easy", which graduates it straight to a multi-day review interval,
+ * so the scheduler stops offering it, so its review count stops climbing. On a
+ * raw count the sharpest user would be held back hardest — penalised for
+ * needing fewer repetitions. If the scheduler is confident enough to park a
+ * skill for days, this gate has nothing left to check.
+ */
+function reviewsSatisfied(skills: IntervalSkill[], gate: number): boolean {
+  return skills.every((s) => s.correctCount + s.incorrectCount >= gate || s.state === "review");
 }
 
 /**
@@ -89,7 +142,11 @@ export function maybeAdvanceStage(meta: UserMeta, skillsForCurrentStage: Interva
   if (meta.curriculumStage >= MAX_STAGE) return meta.curriculumStage;
   const avg = averageMastery(skillsForCurrentStage);
   if (avg === null) return meta.curriculumStage;
-  if (avg >= STAGE_ADVANCE_MASTERY && minReviews(skillsForCurrentStage) >= STAGE_ADVANCE_MIN_REVIEWS) {
+  const streak = meta.answerStreak;
+  if (
+    avg >= masteryGate(STAGE_ADVANCE_MASTERY, streak) &&
+    reviewsSatisfied(skillsForCurrentStage, reviewGate(STAGE_ADVANCE_MIN_REVIEWS, streak))
+  ) {
     return meta.curriculumStage + 1;
   }
   return meta.curriculumStage;
@@ -100,11 +157,18 @@ export function maybeAdvanceStage(meta: UserMeta, skillsForCurrentStage: Interva
  * + descending -> + harmonic), based on mastery of the modes already
  * unlocked.
  */
-export function maybeAdvanceModeStage(modeStage: ModeStage, skillsForUnlockedModes: IntervalSkill[]): ModeStage {
+export function maybeAdvanceModeStage(
+  modeStage: ModeStage,
+  skillsForUnlockedModes: IntervalSkill[],
+  answerStreak: number,
+): ModeStage {
   if (modeStage >= 2) return modeStage;
   const avg = averageMastery(skillsForUnlockedModes);
   if (avg === null) return modeStage;
-  if (avg >= MODE_UNLOCK_MASTERY && minReviews(skillsForUnlockedModes) >= MODE_UNLOCK_MIN_REVIEWS) {
+  if (
+    avg >= masteryGate(MODE_UNLOCK_MASTERY, answerStreak) &&
+    reviewsSatisfied(skillsForUnlockedModes, reviewGate(MODE_UNLOCK_MIN_REVIEWS, answerStreak))
+  ) {
     return (modeStage + 1) as ModeStage;
   }
   return modeStage;
@@ -120,11 +184,15 @@ export function maybeAdvanceContextStage(
   contextStage: ContextStage,
   modeStage: ModeStage,
   skillsForUnlockedContexts: IntervalSkill[],
+  answerStreak: number,
 ): ContextStage {
   if (contextStage >= 1 || modeStage < 2) return contextStage;
   const avg = averageMastery(skillsForUnlockedContexts);
   if (avg === null) return contextStage;
-  if (avg >= CONTEXT_UNLOCK_MASTERY && minReviews(skillsForUnlockedContexts) >= CONTEXT_UNLOCK_MIN_REVIEWS) {
+  if (
+    avg >= masteryGate(CONTEXT_UNLOCK_MASTERY, answerStreak) &&
+    reviewsSatisfied(skillsForUnlockedContexts, reviewGate(CONTEXT_UNLOCK_MIN_REVIEWS, answerStreak))
+  ) {
     return 1;
   }
   return contextStage;

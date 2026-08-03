@@ -34,8 +34,11 @@ export interface AnswerResult {
  * Correct answers are graded by how fast they were made instead of asking
  * the user to self-report — a quick answer implies confident recall, a slow
  * one implies the interval was worked out rather than recognized. Timed from
- * when the question first appears, so it includes the reaction time to hit
- * "Play" as well as listening and thinking time.
+ * the moment the interval has finished sounding, so this is thinking time
+ * only: listening to a long tonal cadence does not count against the user,
+ * and answering before the last note dies away reads as instant recognition.
+ * Replaying does not restart the clock — needing another listen is exactly
+ * the hesitation this is trying to measure.
  */
 const FAST_RESPONSE_MS = 3500;
 const SLOW_RESPONSE_MS = 9000;
@@ -69,6 +72,7 @@ export function createInitialState(now: number, id = "local-user"): EngineState 
       totalReviews: 0,
       streak: 0,
       lastSessionDate: null,
+      answerStreak: 0,
       curriculumStage: 0,
       modeStage: 0,
       contextStage: 0,
@@ -109,21 +113,13 @@ export class LearningEngine {
   }
 
   /**
-   * Record an answer. `answer` is the chosen interval in semitones for an
-   * identify question, or the chosen position (1 or 2) for a contrast trial.
+   * Record the user's first answer to a question, `answer` being the chosen
+   * interval in semitones. Only the first attempt is graded — see
+   * `recordRetryMiss` for the guesses that follow a miss.
    */
   submitAnswer(question: Question, answer: number, responseTimeMs: number, now: number): AnswerResult {
-    const correct =
-      question.kind === "contrast" ? answer === question.targetPosition : answer === question.id.semitones;
-
-    // Picking the wrong half of a contrast trial *is* mistaking one interval
-    // for the other, so it feeds the confusion matrix the same way.
-    const userSemitones =
-      question.kind === "contrast"
-        ? correct
-          ? question.targetSemitones
-          : question.otherSemitones
-        : answer;
+    const correct = answer === question.id.semitones;
+    const userSemitones = answer;
 
     const grade: Grade = correct ? gradeFromResponseTime(responseTimeMs) : "again";
 
@@ -161,16 +157,24 @@ export class LearningEngine {
 
     const skills = { ...this.state.skills, [key]: skill };
 
+    // A blocked burst exists to establish what a brand new interval sounds
+    // like. Recognizing it instantly means there is nothing left to establish,
+    // so the rest of the burst would just be the same question again.
+    const session =
+      grade === "easy" && this.state.session?.blockSkillKey === key ? undefined : this.state.session;
+
     const nextState: EngineState = {
       ...this.state,
       skills,
       confusion,
+      session,
       reviewEvents: [...this.state.reviewEvents.slice(-499), event],
       meta: {
         ...this.state.meta,
         totalReviews: this.state.meta.totalReviews + 1,
         lastSessionDate: today,
         streak,
+        answerStreak: correct ? this.state.meta.answerStreak + 1 : 0,
       },
     };
 
@@ -180,12 +184,29 @@ export class LearningEngine {
     return { correct, grade, correctSemitones: question.id.semitones, skill };
   }
 
+  /**
+   * Record a wrong guess made *after* the question was already graded, i.e.
+   * on a retry. Mistaking one interval for another is the same mistake
+   * whether or not it was the first guess, so it feeds the confusion matrix —
+   * but the skill has already been scheduled and counted, so nothing else
+   * moves. Retrying must not be a way to grind extra reviews out of one
+   * question.
+   */
+  recordRetryMiss(question: Question, answer: number, now: number): void {
+    if (answer === question.id.semitones) return;
+    this.state = {
+      ...this.state,
+      confusion: recordConfusion(this.state.confusion, question.id.semitones, answer, now),
+    };
+  }
+
   private advanceCurriculumIfReady(): void {
     const meta = this.state.meta;
     const stageSemitones = unlockedSemitones(meta.curriculumStage);
     const currentModes = unlockedModes(meta.modeStage);
     const currentContexts = unlockedContexts(meta.contextStage);
 
+    const expectedSkills = stageSemitones.length * currentModes.length * currentContexts.length;
     const unlockedSkills = stageSemitones.flatMap((s) =>
       currentModes.flatMap((m) =>
         currentContexts
@@ -197,9 +218,20 @@ export class LearningEngine {
       ),
     );
 
+    // Nothing advances until everything currently unlocked has at least been
+    // heard once. The gates below average over the skills that exist, so
+    // without this a single skill kept in rotation could carry the whole
+    // ladder while the rest of the stage was never introduced.
+    if (unlockedSkills.length < expectedSkills) return;
+
     const nextStage = maybeAdvanceStage(meta, unlockedSkills);
-    const nextModeStage = maybeAdvanceModeStage(meta.modeStage, unlockedSkills);
-    const nextContextStage = maybeAdvanceContextStage(meta.contextStage, meta.modeStage, unlockedSkills);
+    const nextModeStage = maybeAdvanceModeStage(meta.modeStage, unlockedSkills, meta.answerStreak);
+    const nextContextStage = maybeAdvanceContextStage(
+      meta.contextStage,
+      meta.modeStage,
+      unlockedSkills,
+      meta.answerStreak,
+    );
 
     if (
       nextStage !== meta.curriculumStage ||

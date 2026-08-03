@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { getInterval, type Direction, type PlaybackMode, type ToneContext } from "../music/intervals";
+import { useEffect, useRef, useState } from "react";
+import type { Direction, PlaybackMode, ToneContext } from "../music/intervals";
 import type { useLearningEngine } from "../state/useLearningEngine";
 
 type Engine = ReturnType<typeof useLearningEngine>;
@@ -10,13 +10,35 @@ function modeLabel(mode: PlaybackMode, direction: Direction | null, context: Ton
 }
 
 export function TrainingScreen({ engine }: { engine: Engine }) {
-  const { question, phase, feedback, play, chooseAnswer, next } = engine;
+  const { question, phase, wrongAnswers, feedback, play, chooseAnswer } = engine;
   const [hasPlayed, setHasPlayed] = useState(false);
   const [playing, setPlaying] = useState(false);
+  /**
+   * Browsers only let audio start from a user gesture, so the first question
+   * of a session has to be played by hand. Every one after that plays itself.
+   * A ref rather than state: flipping it must not re-run the effect below and
+   * replay the question that just unlocked the audio.
+   */
+  const audioUnlockedRef = useRef(false);
 
   useEffect(() => {
     setHasPlayed(false);
-  }, [question]);
+    if (!question || !audioUnlockedRef.current) return;
+
+    let cancelled = false;
+    setPlaying(true);
+    void (async () => {
+      try {
+        await play();
+        if (!cancelled) setHasPlayed(true);
+      } finally {
+        if (!cancelled) setPlaying(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [question, play]);
 
   if (!question) return null;
 
@@ -25,23 +47,19 @@ export function TrainingScreen({ engine }: { engine: Engine }) {
     try {
       await play();
       setHasPlayed(true);
+      audioUnlockedRef.current = true;
     } finally {
       setPlaying(false);
     }
   };
 
-  const answersDisabled = !hasPlayed || phase !== "answering";
+  // Once the answer is right the question is over and advances on its own,
+  // so the choices lock rather than letting a stray click land on the next one.
+  const answersDisabled = !hasPlayed || phase === "correct";
 
   return (
     <div className="training">
       <p className="mode-label">{modeLabel(question.id.mode, question.id.direction, question.id.context)}</p>
-
-      {question.kind === "contrast" && (
-        <p className="prompt">
-          Two intervals, same starting note. Which one was the{" "}
-          <strong>{getInterval(question.targetSemitones).shortName}</strong>?
-        </p>
-      )}
 
       <div className="play-row">
         <button className="btn btn-primary" onClick={handlePlay} disabled={playing}>
@@ -53,39 +71,25 @@ export function TrainingScreen({ engine }: { engine: Engine }) {
       </div>
 
       <div className="choices">
-        {question.kind === "contrast"
-          ? ([1, 2] as const).map((position) => (
-              <button
-                key={position}
-                className="btn choice"
-                disabled={answersDisabled}
-                onClick={() => chooseAnswer(position)}
-              >
-                {position === 1 ? "First" : "Second"}
-              </button>
-            ))
-          : question.choices.map((choice) => (
-              <button
-                key={choice.semitones}
-                className="btn choice"
-                disabled={answersDisabled}
-                onClick={() => chooseAnswer(choice.semitones)}
-              >
-                {choice.label}
-              </button>
-            ))}
+        {question.choices.map((choice) => {
+          const eliminated = wrongAnswers.includes(choice.semitones);
+          return (
+            <button
+              key={choice.semitones}
+              className={`btn choice${eliminated ? " choice-eliminated" : ""}`}
+              disabled={answersDisabled || eliminated}
+              onClick={() => chooseAnswer(choice.semitones)}
+            >
+              {choice.label}
+            </button>
+          );
+        })}
       </div>
 
       {feedback && (
         <div className={`feedback ${feedback.correct ? "feedback-correct" : "feedback-incorrect"}`}>
           <p>{feedback.message}</p>
         </div>
-      )}
-
-      {(phase === "incorrect" || phase === "correct-done") && (
-        <button className="btn btn-primary next-btn" onClick={next}>
-          Next question →
-        </button>
       )}
     </div>
   );

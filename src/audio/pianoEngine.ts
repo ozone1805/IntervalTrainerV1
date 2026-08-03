@@ -45,9 +45,6 @@ const SAMPLE_URLS: Record<string, string> = {
 const NOTE_DURATION_SECONDS = 0.9;
 const MELODIC_GAP_SECONDS = 0.55;
 
-/** Long enough that the two halves of a contrast trial read as separate items. */
-const CONTRAST_GAP_SECONDS = 1.4;
-
 /** I–V–I, as semitone offsets from the key's tonic. */
 const CADENCE_CHORDS = [
   [0, 4, 7],
@@ -94,7 +91,7 @@ export class PianoEngine {
     return CADENCE_CHORDS.length * CADENCE_CHORD_SECONDS + CADENCE_TAIL_SECONDS;
   }
 
-  /** Schedule one interval, returning how long it occupies. */
+  /** Schedule one interval to start at `at`, returning how long it occupies. */
   private scheduleInterval(
     sampler: Tone.Sampler,
     rootMidi: number,
@@ -119,6 +116,11 @@ export class PianoEngine {
     return MELODIC_GAP_SECONDS + NOTE_DURATION_SECONDS;
   }
 
+  /**
+   * Play the question. Resolves once the audio is *scheduled*, returning how
+   * many seconds it will take to sound — the caller needs that to tell
+   * listening time apart from thinking time when grading the answer.
+   */
   async playInterval(
     rootMidi: number,
     semitones: number,
@@ -126,50 +128,19 @@ export class PianoEngine {
     direction: Direction | null,
     context: ToneContext = "isolated",
     keyRootMidi?: number,
-  ): Promise<void> {
+  ): Promise<number> {
     await this.ensureReady();
     const sampler = this.sampler;
-    if (!sampler) return;
+    if (!sampler) return 0;
 
     let at = Tone.now();
+    let total = 0;
     if (context === "tonal" && keyRootMidi !== undefined) {
-      at += this.scheduleCadence(sampler, keyRootMidi, at);
+      const cadence = this.scheduleCadence(sampler, keyRootMidi, at);
+      at += cadence;
+      total += cadence;
     }
-    this.scheduleInterval(sampler, rootMidi, semitones, mode, direction, at);
-  }
-
-  /**
-   * Play two intervals back to back over the same root. Sharing the root is
-   * the point: it leaves the distance between the notes as the only thing
-   * that differs, which is what makes the pair discriminable.
-   */
-  async playContrast(
-    rootMidi: number,
-    firstSemitones: number,
-    secondSemitones: number,
-    mode: PlaybackMode,
-    direction: Direction | null,
-    context: ToneContext = "isolated",
-    keyRootMidi?: number,
-  ): Promise<void> {
-    await this.ensureReady();
-    const sampler = this.sampler;
-    if (!sampler) return;
-
-    let at = Tone.now();
-    if (context === "tonal" && keyRootMidi !== undefined) {
-      at += this.scheduleCadence(sampler, keyRootMidi, at);
-    }
-
-    const firstLength = this.scheduleInterval(sampler, rootMidi, firstSemitones, mode, direction, at);
-    this.scheduleInterval(
-      sampler,
-      rootMidi,
-      secondSemitones,
-      mode,
-      direction,
-      at + firstLength + CONTRAST_GAP_SECONDS,
-    );
+    return total + this.scheduleInterval(sampler, rootMidi, semitones, mode, direction, at);
   }
 }
 

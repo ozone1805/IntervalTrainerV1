@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ProgressSummary } from "../learning/engine";
 
 export function ProgressScreen({
@@ -7,11 +8,12 @@ export function ProgressScreen({
   progress: ProgressSummary;
   onReset: () => void;
 }) {
-  const handleReset = () => {
-    if (window.confirm("Reset all progress? This clears your curriculum stage, mastery, and history.")) {
-      onReset();
-    }
-  };
+  /**
+   * Confirmation is a second in-page step rather than `window.confirm`.
+   * Embedded and automated browsers dismiss native dialogs without ever
+   * showing them, which silently turns the button into a no-op.
+   */
+  const [confirmingReset, setConfirmingReset] = useState(false);
 
   return (
     <div className="progress">
@@ -75,9 +77,29 @@ export function ProgressScreen({
         )}
       </section>
 
-      <button className="btn reset-btn" onClick={handleReset}>
-        Reset progress
-      </button>
+      {confirmingReset ? (
+        <div className="reset-confirm">
+          <p>Reset all progress? This clears your curriculum stage, mastery, and history.</p>
+          <div className="reset-actions">
+            <button
+              className="btn reset-btn"
+              onClick={() => {
+                setConfirmingReset(false);
+                onReset();
+              }}
+            >
+              Yes, reset everything
+            </button>
+            <button className="btn" onClick={() => setConfirmingReset(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button className="btn reset-btn" onClick={() => setConfirmingReset(true)}>
+          Reset progress
+        </button>
+      )}
     </div>
   );
 }

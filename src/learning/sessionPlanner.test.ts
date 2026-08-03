@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { recordConfusion } from "./confusion";
 import { createInitialState, LearningEngine } from "./engine";
-import { CONTRAST_THRESHOLD, INTRO_BLOCK_SIZE, planQuestion } from "./sessionPlanner";
+import { INTRO_BLOCK_SIZE, planQuestion } from "./sessionPlanner";
 import { createNewSkill } from "./spacedRepetition";
 import { skillKey, type ConfusionRecord, type EngineState, type SkillId } from "./types";
 
@@ -38,7 +38,9 @@ describe("blocked introduction", () => {
     for (let i = 0; i < INTRO_BLOCK_SIZE + 1; i++) {
       const q = engine.nextQuestion(NOW, rng);
       keys.push(q.skillKey);
-      engine.submitAnswer(q, q.kind === "contrast" ? q.targetPosition : q.id.semitones, 500, NOW);
+      // Slow answers, so the burst runs its full length — recognizing the new
+      // interval instantly cuts it short instead, covered in engine.test.ts.
+      engine.submitAnswer(q, q.id.semitones, 12_000, NOW);
     }
 
     const burst = keys.slice(0, INTRO_BLOCK_SIZE);
@@ -59,47 +61,31 @@ describe("blocked introduction", () => {
   });
 });
 
-describe("contrast trials", () => {
-  const unlocked = [5, 7];
+describe("variety", () => {
+  it("does not ask the same skill twice in a row when something else is available", () => {
+    const state = stateWith([P4, P5]);
+    const asked = { ...state, reviewEvents: [{ skillKey: skillKey(P4) } as EngineState["reviewEvents"][0]] };
 
-  it("serves a contrast trial once a pair crosses the threshold", () => {
-    const state = stateWith([P4, P5], muddled(5, 7, CONTRAST_THRESHOLD));
-    const { question } = planQuestion(state, [P4, P5], unlocked, NOW, () => 0);
-
-    expect(question.kind).toBe("contrast");
-    if (question.kind !== "contrast") return;
-    expect(question.targetSemitones).toBe(question.id.semitones);
-    expect([5, 7]).toContain(question.otherSemitones);
-    expect(question.otherSemitones).not.toBe(question.targetSemitones);
+    // Both are due and P4 scores at least as high, but it was just asked.
+    const { question } = planQuestion(asked, [P4, P5], [5, 7], NOW, () => 0);
+    expect(question.skillKey).toBe(skillKey(P5));
   });
 
-  it("plays both halves from the same root so only the interval differs", () => {
-    const state = stateWith([P4, P5], muddled(5, 7, CONTRAST_THRESHOLD));
-    const { question } = planQuestion(state, [P4, P5], unlocked, NOW, () => 0);
-    expect(question.kind).toBe("contrast");
-    expect(question.rootMidi).toBeGreaterThan(0);
+  it("repeats rather than running dry when it is the only skill available", () => {
+    const state = stateWith([P4]);
+    const asked = { ...state, reviewEvents: [{ skillKey: skillKey(P4) } as EngineState["reviewEvents"][0]] };
+
+    const { question } = planQuestion(asked, [P4], [5], NOW, () => 0);
+    expect(question.skillKey).toBe(skillKey(P4));
   });
+});
 
-  it("stays with plain identification below the threshold", () => {
-    const state = stateWith([P4, P5], muddled(5, 7, CONTRAST_THRESHOLD - 1));
-    const { question } = planQuestion(state, [P4, P5], unlocked, NOW, () => 0);
-    expect(question.kind).toBe("identify");
-  });
+describe("distractor choice", () => {
+  it("puts the interval a target is most often mistaken for on the answer list", () => {
+    const state = stateWith([P4, P5], muddled(5, 7, 4));
+    const { question } = planQuestion(state, [P4], [5, 7, 4, 3], NOW, () => 0);
 
-  it("does not contrast during a blocked introduction", () => {
-    // Confusion is on the books, but the skill itself has never been seen —
-    // blocking wins, because there is nothing to discriminate against yet.
-    const state = { ...createInitialState(NOW), confusion: muddled(5, 7, CONTRAST_THRESHOLD) };
-    const { question, session } = planQuestion(state, [P4, P5], unlocked, NOW, () => 0);
-
-    expect(session?.blockRemaining).toBe(INTRO_BLOCK_SIZE - 1);
-    expect(question.kind).toBe("identify");
-  });
-
-  it("leaves most questions as plain identification", () => {
-    const state = stateWith([P4, P5], muddled(5, 7, CONTRAST_THRESHOLD));
-    // 0.9 exceeds the contrast probability, so this question stays an identify.
-    const { question } = planQuestion(state, [P4, P5], unlocked, NOW, () => 0.9);
-    expect(question.kind).toBe("identify");
+    expect(question.id.semitones).toBe(5);
+    expect(question.choices.map((c) => c.semitones)).toContain(7);
   });
 });

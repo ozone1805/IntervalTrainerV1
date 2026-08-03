@@ -8,6 +8,11 @@ import { skillKey, STATE_VERSION, type EngineState, type IntervalSkill } from ".
  * skills are exactly today's "isolated" skills, so they migrate by re-keying
  * rather than being discarded — otherwise a returning user's whole history
  * would silently orphan and every interval would look brand new again.
+ *
+ * Version 1 predates `answerStreak`. Re-keying is idempotent, so v1 blobs
+ * take the same path and just pick up the new field at 0 — a returning user
+ * starts at normal pace and earns the fast track again, which is the right
+ * default after a break.
  */
 export function migrateState(raw: unknown): EngineState | null {
   if (!raw || typeof raw !== "object") return null;
@@ -24,7 +29,11 @@ export function migrateState(raw: unknown): EngineState | null {
   return {
     ...state,
     version: STATE_VERSION,
-    meta: { ...state.meta, contextStage: state.meta?.contextStage ?? 0 },
+    meta: {
+      ...state.meta,
+      contextStage: state.meta?.contextStage ?? 0,
+      answerStreak: state.meta?.answerStreak ?? 0,
+    },
     skills,
     confusion: state.confusion ?? {},
     reviewEvents: state.reviewEvents ?? [],

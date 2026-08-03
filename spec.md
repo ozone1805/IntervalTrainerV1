@@ -283,11 +283,27 @@ from
 
 "I know this but it is competing with a new concept."
 
+## Pace
+
+Progression must keep up with a user who already knows the material. Drilling someone on what they
+have repeatedly proved they can hear is the fastest way to make an ear trainer boring.
+
+A run of consecutive first-attempt correct answers lowers the bar for unlocking the next stage,
+mode, and context — roughly halving it at a long run. Any miss resets the run and restores the
+full requirements. Mastery itself is never granted, only the waiting is shortened.
+
+No stage advances until every interval it contains has actually been heard at least once.
+
 ---
 
 # 7. Review Grades
 
-After answering, the user provides a confidence grade:
+Grades are inferred from how fast the answer came rather than self-reported, so the user is never
+asked to rate themselves mid-drill. Timing runs from the moment the interval has finished sounding,
+so it measures thinking time and not listening time; a replay does not restart it. A miss is always
+"Again".
+
+The grades and their effects:
 
 ## Again
 
@@ -426,7 +442,17 @@ Must include:
 * Replay button
 * Answer choices
 * Feedback
-* Next question button
+
+Each question plays itself as it appears. Browsers only start audio from a user gesture, so the
+first question of a session has to be played by hand; every one after that is automatic. The Play
+and Replay buttons stay for listening again on demand.
+
+A wrong answer does not end the question. The chosen answer is crossed off and the user listens
+again and picks again, until they get it — being told the answer skips the listening that the
+exercise is for. Only the first attempt counts toward grading and scheduling.
+
+Once the answer is right, the next question follows automatically. There is no "next question"
+button: the user's only decision per question is which interval they heard.
 
 Minimal, clean design.
 
