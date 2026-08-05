@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { InstallBanner } from "./screens/InstallBanner";
 import { ProgressScreen } from "./screens/ProgressScreen";
 import { TrainingScreen } from "./screens/TrainingScreen";
 import { useLearningEngine } from "./state/useLearningEngine";
@@ -32,6 +33,8 @@ export default function App() {
           <ProgressScreen progress={engine.progress} onReset={engine.resetProgress} />
         )}
       </main>
+
+      <InstallBanner />
     </div>
   );
 }

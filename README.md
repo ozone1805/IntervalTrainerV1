@@ -73,9 +73,44 @@ npm test          # run learning engine unit tests
 npm run build     # typecheck + production build
 ```
 
+## Installable app (PWA)
+
+The build is an installable Progressive Web App, so it can be shared as a plain link and added to
+a phone's home screen — no app store, no accounts. Progress stays per-device: IndexedDB with no
+sync, so each person who opens the link gets their own independent history.
+
+- `public/manifest.webmanifest` + `public/icon-*.png` — name, colours, and icons for installation.
+- `public/sw.js` — the offline shell. Precaches the app and every piano sample on install,
+  serves navigations network-first (so a new deploy lands as soon as there is a connection) and
+  everything else cache-first. It ships with placeholder tokens that
+  `scripts/inject-sw-manifest.mjs` rewrites after each build with the content-hashed filenames.
+- `src/pwa/` — service worker registration (production only) and the iOS/standalone detection the
+  install and audio hints depend on.
+
+Two platform facts shape the UI:
+
+- **iOS cannot be prompted to install.** There is no API, so `InstallBanner` falls back to telling
+  the user which Safari menu items to tap. Chrome gets a real `beforeinstallprompt` button.
+- **The iPhone ring/silent switch mutes Web Audio**, silently and undetectably. For an ear trainer
+  that reads as a broken app, so `RingerHint` warns about it before the first play.
+
+Piano samples are vendored into `public/audio/salamander/` rather than streamed from the Tone.js
+CDN. `Tone.Sampler` blocks the first note until every sample has loaded, so the set is trimmed to
+the C2–C6 the trainer can actually sound — 17 files, ~1.2 MB, at Salamander's native minor-third
+spacing.
+
 ## Deployment
 
-Not currently deployed anywhere — development and testing happen locally via `npm run dev`.
+Deployed to GitHub Pages at **https://ozone1805.github.io/IntervalTrainerV1/**, served from the
+`gh-pages` branch.
 
-`npm run build` produces a self-contained static site in `dist/`, so any static host will serve it
-as-is if that changes.
+```bash
+npm run deploy    # build, then push dist/ to the gh-pages branch
+```
+
+`scripts/deploy-gh-pages.mjs` publishes through a temporary git worktree, since `dist/` is
+gitignored on the source branch and so has no history for `git subtree` to split off. The branch is
+a single rolling commit of build output.
+
+Because the site is served from a repo subpath, `base` in `vite.config.ts` must stay in sync with
+the repo name; moving to a root-served host means clearing it.

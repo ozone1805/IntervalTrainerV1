@@ -7,14 +7,21 @@ import {
   type ToneContext,
 } from "../music/intervals";
 
-const SALAMANDER_BASE_URL = "https://tonejs.github.io/audio/salamander/";
+/**
+ * Salamander samples, served from our own origin rather than the Tone.js CDN
+ * so the service worker can precache them and playback survives going offline.
+ */
+const SALAMANDER_BASE_URL = `${import.meta.env.BASE_URL}audio/salamander/`;
 
+/**
+ * Only C2–C6. `Tone.Sampler` blocks the first note until *every* sample in this
+ * map has loaded, so octaves the trainer never sounds are pure startup cost:
+ * roots are capped to C3–C5 (`ROOT_MIDI_MIN`/`MAX`) and the widest question is
+ * an octave either side of that, with cadence chords staying inside it. Kept at
+ * Salamander's native minor-third spacing so nothing is pitch-shifted far
+ * enough to sound synthetic.
+ */
 const SAMPLE_URLS: Record<string, string> = {
-  A0: "A0.mp3",
-  C1: "C1.mp3",
-  "D#1": "Ds1.mp3",
-  "F#1": "Fs1.mp3",
-  A1: "A1.mp3",
   C2: "C2.mp3",
   "D#2": "Ds2.mp3",
   "F#2": "Fs2.mp3",
@@ -32,14 +39,6 @@ const SAMPLE_URLS: Record<string, string> = {
   "F#5": "Fs5.mp3",
   A5: "A5.mp3",
   C6: "C6.mp3",
-  "D#6": "Ds6.mp3",
-  "F#6": "Fs6.mp3",
-  A6: "A6.mp3",
-  C7: "C7.mp3",
-  "D#7": "Ds7.mp3",
-  "F#7": "Fs7.mp3",
-  A7: "A7.mp3",
-  C8: "C8.mp3",
 };
 
 const NOTE_DURATION_SECONDS = 0.9;

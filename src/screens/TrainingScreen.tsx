@@ -1,8 +1,38 @@
 import { useEffect, useRef, useState } from "react";
 import type { Direction, PlaybackMode, ToneContext } from "../music/intervals";
+import { isIOS, markDismissed, wasDismissed } from "../pwa/platform";
 import type { useLearningEngine } from "../state/useLearningEngine";
 
 type Engine = ReturnType<typeof useLearningEngine>;
+
+const RINGER_KEY = "ringer-hint-dismissed";
+
+/**
+ * iOS silences Web Audio when the hardware ring/silent switch is engaged, with
+ * no error and no way to detect it from script. For an ear trainer that means
+ * the app looks like it is playing while the user hears nothing, so the only
+ * available fix is to warn them before they conclude it is broken.
+ */
+function RingerHint() {
+  const [dismissed, setDismissed] = useState(() => wasDismissed(RINGER_KEY));
+  if (dismissed || !isIOS()) return null;
+
+  return (
+    <p className="ringer-hint">
+      Hearing nothing? Check the ring/silent switch on the side of your iPhone — it mutes this app
+      too.
+      <button
+        className="link-btn"
+        onClick={() => {
+          setDismissed(true);
+          markDismissed(RINGER_KEY);
+        }}
+      >
+        Dismiss
+      </button>
+    </p>
+  );
+}
 
 function modeLabel(mode: PlaybackMode, direction: Direction | null, context: ToneContext): string {
   const shape = mode === "harmonic" ? "Harmonic" : direction === "down" ? "Descending" : "Ascending";
@@ -60,6 +90,8 @@ export function TrainingScreen({ engine }: { engine: Engine }) {
   return (
     <div className="training">
       <p className="mode-label">{modeLabel(question.id.mode, question.id.direction, question.id.context)}</p>
+
+      <RingerHint />
 
       <div className="play-row">
         <button className="btn btn-primary" onClick={handlePlay} disabled={playing}>

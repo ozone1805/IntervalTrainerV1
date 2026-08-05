@@ -7,17 +7,36 @@
   box-sizing: border-box;
 }
 
+button {
+  /* Suppress the grey flash iOS paints over any tapped control, and the
+     text-selection callout a long press on an answer would otherwise raise. */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  font-family: inherit;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  /* dvh tracks the collapsing browser toolbars on mobile; vh above is the
+     fallback for anything that does not support it. */
+  min-height: 100dvh;
   background: #12141a;
   color: #f2f3f5;
+  /* Stop pull-to-refresh from reloading the app mid-question. */
+  overscroll-behavior-y: contain;
+  -webkit-text-size-adjust: 100%;
 }
 
 #root {
   max-width: 640px;
   margin: 0 auto;
-  padding: 24px 16px 64px;
+  /* Insets keep content clear of the notch and home indicator once the
+     installed app paints edge to edge (viewport-fit=cover). */
+  padding: calc(24px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(64px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
 }
 
 .app-header {
@@ -44,7 +63,8 @@ body {
   border: none;
   background: transparent;
   color: #a7abb5;
-  padding: 8px 14px;
+  padding: 10px 16px;
+  min-height: 40px;
   border-radius: 8px;
   cursor: pointer;
   font-size: 0.9rem;
@@ -60,14 +80,24 @@ body {
   background: #1c1f27;
   color: #f2f3f5;
   padding: 12px 18px;
+  /* 44px is the iOS minimum comfortable tap target. */
+  min-height: 44px;
   border-radius: 10px;
   font-size: 1rem;
   cursor: pointer;
   transition: background 0.15s ease;
 }
 
-.btn:hover:not(:disabled) {
-  background: #262a35;
+/* Hover only where there is a real pointer: on touch, :hover latches after a
+   tap and leaves the last-pressed answer looking selected. */
+@media (hover: hover) {
+  .btn:hover:not(:disabled) {
+    background: #262a35;
+  }
+}
+
+.btn:active:not(:disabled) {
+  background: #2f3441;
 }
 
 .btn:disabled {
@@ -80,7 +110,13 @@ body {
   border-color: #3d63ff;
 }
 
-.btn-primary:hover:not(:disabled) {
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    background: #2f52e0;
+  }
+}
+
+.btn-primary:active:not(:disabled) {
   background: #2f52e0;
 }
 
@@ -183,8 +219,10 @@ body {
   border-color: rgba(255, 92, 92, 0.4);
 }
 
-.reset-btn:hover:not(:disabled) {
-  background: rgba(255, 92, 92, 0.1);
+@media (hover: hover) {
+  .reset-btn:hover:not(:disabled) {
+    background: rgba(255, 92, 92, 0.1);
+  }
 }
 
 .reset-confirm {
@@ -258,4 +296,94 @@ body {
 
 .empty {
   color: #a7abb5;
+}
+
+/* Warns that the iPhone ring/silent switch mutes Web Audio. Sits between the
+   mode label and the play button so it is read before the first tap. */
+.ringer-hint {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 176, 32, 0.12);
+  border: 1px solid rgba(255, 176, 32, 0.35);
+  color: #ffd08a;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  margin-left: 8px;
+  color: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.install-banner {
+  margin-top: 32px;
+  padding: 16px;
+  border-radius: 12px;
+  background: #1c1f27;
+  border: 1px solid #333844;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Direct child only — the paragraph below contains an inline <strong> naming
+   the iOS menu item, which must not become its own line. */
+.install-banner-text > strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.install-banner-text p {
+  margin: 0;
+  color: #a7abb5;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.install-banner-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.install-banner-actions .btn {
+  flex: 1;
+}
+
+.inline-icon {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  margin: 0 0.15em;
+}
+
+/* Only genuinely narrow handsets (original iPhone SE and below). A 375px
+   iPhone has room for the two-up grids, and stacking there would push the
+   answers below the fold for no reason. */
+@media (max-width: 340px) {
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .choices {
+    grid-template-columns: 1fr;
+  }
+
+  .mastery-list li span:first-child {
+    width: 72px;
+  }
 }
